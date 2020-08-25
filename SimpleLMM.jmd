@@ -1,6 +1,6 @@
 # Introduction to Simple Linear Mixed Models by Douglas Bates
 
-In this vignette we describe the theory behind a type of statistical model called *mixed-effects* models and the practice of fitting and analyzing such models using the [`MixedModels`](https://github.com/dmbates/MixedModels.jl) package for [`Julia`](https://julialang.org). These models are used in many different disciplines. Because the descriptions of the models can vary markedly between disciplines, we begin by describing what mixed-effects models are and by exploring a very simple example of one type of mixed model, the *linear mixed model*.
+In this vignette we describe the theory behind a type of statistical model called *mixed-effects* models and the practice of fitting and analyzing such models using the [`MixedModels`](https://github.com/JuliaStats/MixedModels.jl) package for [`Julia`](https://julialang.org). These models are used in many different disciplines. Because the descriptions of the models can vary markedly between disciplines, we begin by describing what mixed-effects models are and by exploring a very simple example of one type of mixed model, the *linear mixed model*.
 
 This simple example allows us to illustrate the use of the `MixedModels` package for fitting such models and other functions for analyzing the fitted model. We also describe methods of assessing the precision of the parameter estimates and of visualizing the conditional distribution of the random effects, given the observed data.
 
@@ -51,8 +51,7 @@ First attach the packages to be used
 ```{julia;term=true}
 import Cairo
 using DataFrames, DataFramesMeta, Distributions, GLM, Gadfly
-using MixedModels, Random, RData, SparseArrays,LinearAlgebra
-
+using MixedModels, Random, LinearAlgebra
 ```
 
 and allow for unqualified names for some graphics functions
@@ -63,7 +62,7 @@ using Gadfly.Guide: xlabel, ylabel, yticks
 ```
 
 The `Dyestuff` data are available in the [`lme4`](https://github.com/lme4/lme4) package for [`R`](http://r-project.org).
-This data frame and others have been stored in the `dataset` directory within the `MixedModels` package.
+This data frame and others are available with `dataset` function of the `MixedModels` package.
 
 Access the `Dyestuff` data
 
@@ -116,7 +115,7 @@ describe(dyestuff2)
 As can be seen in a data plot
 
 ```{julia;echo=false;fig_width=8}
-plot(dyestuff2, x = :batch, y = :yield, point, ylabel("Simulated response"), xlabel(""))
+plot(dyestuff2, y = :batch, x = :yield, point, ylabel("Simulated response"), xlabel(""))
 ```
 
 the batch-to-batch variability in these data is small compared to the within-batch variability. In some approaches to mixed models it can be difficult to fit models to such data. Paradoxically, small “variance components” can be more difficult to estimate than large variance components.
@@ -134,7 +133,7 @@ The structure of the formula will be explained after showing the example.
 A model allowing for an overall level of the `Yield` and for an additive random effect for each level of `Batch` can be fit as
 
 ```{julia;term=true}
-mm1 = fit!(LinearMixedModel(@formula(yield ~ 1 + (1 | batch)), dyestuff))
+mm1 = fit(MixedModel, @formula(yield ~ 1 + (1 | batch)), dyestuff)
 ```
 
 As shown in the summary of the model fit, the default estimation criterion is maximum likelihood. The summary provides several other model-fit statistics such as Akaike’s Information Criterion (`AIC`), Schwarz’s Bayesian Information Criterion (`BIC`), the log-likelihood at the parameter estimates, and the objective function (negative twice the log-likelihood) at the parameter estimates. These are all statistics related to the model fit and are used to compare different models fit to the same data.
@@ -156,7 +155,7 @@ The final part of the printed display gives the estimates and standard errors of
 Fitting a similar model to the `dyestuff2` data produces an estimate $\widehat{\sigma_1^2}=0$.
 
 ```{julia;term=true}
-mm2 = fit!(LinearMixedModel(@formula(yield ~ 1 + (1 | batch)), dyestuff2))
+mm2 = fit(MixedModel, @formula(yield ~ 1 + (1 | batch)), dyestuff2)
 ```
 
 An estimate of `0` for $\sigma_1$ does not mean that there is no variation between the groups. Indeed the figures shows that there is some small amount of variability between the groups. The estimate, $\widehat{\sigma_1}$, is a measure of the “between-group” variability that is **in excess of** the variability induced by the "within-group" or residual variability in the responses.  
@@ -309,10 +308,10 @@ are sometimes called the *best linear unbiased predictors* or BLUPs of the rando
 
 ### Fields of a `LinearMixedModel` object
 
-The optional second argument, `verbose`, in a call to `fit!` of a `LinearMixedModel` object produces output showing the progress of the iterative optimization of $\tilde{d}(\bf\theta|\bf y)$.
+An optional argument, `verbose`, in a call to `fit` of a `MixedModel` produces output showing the progress of the iterative optimization of $\tilde{d}(\bf\theta|\bf y)$.
 
 ```{julia;term=true}
-mm1 = fit!(LinearMixedModel(@formula(yield ~ 1 + (1 | batch)), dyestuff), verbose = true);
+mm1 = fit(MixedModel, @formula(yield ~ 1 + (1 | batch)), dyestuff, verbose = true);
 ```
 
 The algorithm converges after 18 function evaluations to a profiled deviance of 327.32706 at $\theta=0.752581$. In this model the parameter $\theta$ is of length 1, the single element being the ratio $\sigma_1/\sigma$.
@@ -334,8 +333,6 @@ The `formula` field is a copy of the model formula
 ```{julia;term=true}
 mm1.formula
 ```
-
-The `mf` field is a `ModelFrame` constructed from the `formula` and `data` arguments to `lmm`. It contains a `DataFrame` formed by reducing the `data` argument to only those columns needed to evaluate the `formula` and only those rows that have no missing data. It also contains information on the terms in the model formula and on any "contrasts" associated with categorical variables in the fixed-effects terms.
 
 The `trms` field is a vector of numerical objects representing the terms in the model, including the response vector. As the names imply, the `sqrtwts` and `wttrms` fields are for incorporating case weights. These fields are not often used when fitting linear mixed models but are vital to the process of fitting a generalized linear mixed model, described in vignette [sec:glmm].  When used, `sqrtwts` is a diagonal matrix of size `n`. A size of `0` indicates weights are not used.
 
@@ -369,7 +366,7 @@ In practice these matrices are stored in a highly condensed form because, in som
 In small examples the structure is more obvious when the `ReMat` is converted to a sparse or a dense matrix.
 
 ```{julia;term=true}
-sparse(first(mm1.reterms))
+first(mm1.reterms).adjA  # sparse matrix form of the transpose (adjoint)
 ```
 
 ```{julia;term=true}
@@ -379,7 +376,7 @@ Matrix(first(mm1.reterms))
 The `A` field is a representation of the blocked, square, symmetric matrix $\bf A = [Z : X : y]'[Z : X : y]$. Only the upper triangle of `A` is stored. The number of blocks of the rows and columns of `A` is the number of vertical sections of $\bf Z$ (i.e. the number of random-effects terms) plus 2.
 
 ```{julia;term=true}
-mm1.A  # nblocks() not defined
+mm1.A
 ```
 
 ```{julia;term=true}
@@ -470,7 +467,7 @@ logdet(mm1) == (2*logdet(mm1.L[Block(1, 1)])) == (2*sum(log.(diag(mm1.L[Block(1,
 The penalized residual sum of squares is the square of the single element of the lower-right block, `L[3, 3]` in this case
 
 ```{julia;term=true}
-abs2(mm1.L[Block(3, 3)][1, 1])
+abs2(only(mm1.L[Block(3, 3)]))
 ```
 
 ```{julia;term=true}
@@ -509,7 +506,7 @@ I am a firm believer in the value of plotting results **before** summarizing the
 
 The [`Gadfly`](https://github.com/GiovineItalia/Gadfly.jl) package for Julia uses a "grammar of graphics" specification, similar to the [`ggplot2`](http://ggplot2.org/) package for R.  A histogram or a kernel density plot are describes as *geometries* and specified by `Geom.histogram` and `Geom.density`, respectively.
 
-We start with the model residuals.
+We start with the estimate of the standard deviation of the residuals.
 
 ```{julia;term=true}
 σs = @where(mm1bstp_df, :type .== "σ", :group .== "residual").value
@@ -525,12 +522,12 @@ Here are samples for the fixed effect.
 βs = @where(mm1bstp_df, :type .== "β").value
 ```
 
-And, finally, the samples for the subject-related VC.
-
 ```{julia;echo=false;fig_cap="Parametric bootstrap samples for fixed-effect estimates"; fig_width=8;}
 plot(x = βs, Geom.histogram,
     Guide.xlabel("Parametric bootstrap samples of β"))
 ```
+
+And, finally, the samples for the subject-related VC.
 
 ```{julia;term=true}
 σ₁s = @where(mm1bstp_df, :type .== "σ", :group .== "batch").value
@@ -687,7 +684,7 @@ end
 For example, the 95% HPD interval calculated from the sample of $\beta_1$ values is
 
 ```{julia;term=true}
-hpdinterval(βs)
+shortestcovint(βs)
 ```
 
 which is very close to the central probability interval of
@@ -701,7 +698,7 @@ because the empirical distribution of the $\beta_1$ sample is very similar to a 
 The HPD interval on $\sigma^2$ is 
 
 ```{julia;term=true}
-hpdinterval(abs2.(σs))
+shortestcovint(abs2.(σs))
 ```
 
 which is shifted to the left relative to the central probability interval
@@ -715,7 +712,7 @@ because the distribution of the $\sigma^2$ sample is skewed to the right.  The H
 The HPD interval does not have the property that the endpoints of the interval on $\sigma^2$ are the squares of the endpoints of the intervals on $\sigma$, because "shorter" on the scale of $\sigma$ does not necessarily correspond to shorter on the scale of $\sigma^2$.
 
 ```{julia;term=true}
-sigma95hpd = hpdinterval(σs)
+sigma95hpd = shortestcovint(σs)
 ```
 
 ```{julia;term=true}
@@ -725,17 +722,17 @@ abs2.(sigma95hpd)
 Finally, a 95% HPD interval on $\sigma_1$ includes the boundary value $\sigma_1=0$.
 
 ```{julia;term=true}
-hpdinterval(σ₁s)
+shortestcovint(σ₁s)
 ```
 
 In fact, the confidence level or coverage probability must be rather small before the boundary value is excluded
 
 ```{julia;term=true}
-hpdinterval(σ₁s, 0.798)
+shortestcovint(σ₁s, 0.798)
 ```
 
 ```{julia;term=true}
-hpdinterval(σ₁s, 0.784)
+shortestcovint(σ₁s, 0.784)
 ```
 
 ### Empirical cumulative distribution function
@@ -745,7 +742,7 @@ The empirical cumulative distribution function (ecdf) of a sample maps the range
 ```{julia;echo=false;fig_width=8}
 plot(layer(x = quantile(σ₁s, ppt250), y = ppt250, line),
      layer(xintercept = quantile(σ₁s, [0.1, 0.9]), vline(color = colorant"orange")),
-     layer(xintercept = hpdinterval(σ₁s, 0.8), vline(color=colorant"red")),
+     layer(xintercept = [shortestcovint(σ₁s, 0.8)...], vline(color=colorant"red")),
      ylabel(""), xlabel("Batch-related σ₁s"), yticks(ticks=[0.0, 0.1, 0.9, 1.0])
 )
 ```
@@ -759,7 +756,7 @@ The differences in the widths becomes more dramatic on the scale of $\sigma_1^2$
 plot(
     layer(x = quantile(σ₁², ppt250), y = ppt250, line),
     layer(xintercept = quantile(σ₁², [0.1, 0.9]), vline(color = colorant"orange")),
-    layer(xintercept = hpdinterval(σ₁², 0.8), vline(color=colorant"red")),
+    layer(xintercept = [shortestcovint(σ₁², 0.8)...], vline(color=colorant"red")),
     ylabel(""), xlabel("σ₁²"), yticks(ticks=[0.0, 0.1, 0.9, 1.0])
 )
 ```
@@ -868,7 +865,7 @@ Load a dataset from `MixedModels.datasets()`. You can also use one of your own.
 
 1. Check the documentation, the structure () and a summary of the data. 
 
-1. Fit a model with a simpley scalar random-effects term for the random factor. Create a dotplot of the conditional modes of the random effects.
+1. Fit a model with a simple scalar random-effects term for the random factor. Create a dotplot of the conditional modes of the random effects.
 
 1. Create a bootstrap simulation from the model and construct 95% bootstrap-based confidence intervals on the parameters. Is the confidence interval on $\sigma_1$ close to being symmetric about the estimate? Is the corresponding interval on $\log(\sigma_1)$ close to being symmetric about its estimate?
 
