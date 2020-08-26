@@ -1,4 +1,4 @@
-# Introduction to Simple Linear Mixed Models by Douglas Bates
+# Introduction to Simple Linear Mixed Models
 
 In this vignette we describe the theory behind a type of statistical model called *mixed-effects* models and the practice of fitting and analyzing such models using the [`MixedModels`](https://github.com/JuliaStats/MixedModels.jl) package for [`Julia`](https://julialang.org). These models are used in many different disciplines. Because the descriptions of the models can vary markedly between disciplines, we begin by describing what mixed-effects models are and by exploring a very simple example of one type of mixed model, the *linear mixed model*.
 
@@ -6,26 +6,58 @@ This simple example allows us to illustrate the use of the `MixedModels` package
 
 ## The big picture of linear mixed models (LMM)
 
-**RK-COMMENT: I propose to reorganize this section - only started this, it is not completed yet.**
+Linear mixed models are suitable for the analysis of multidimensional experimental and observational studies. Here we situate the simple example analyzed below within the general framework of this methodology.
 
-+ Distinguish three fundamental dimensions in design of study:
-     + Random vs. fixed factors (i.e., categorical covariates with discrete levels)
-     + Experimental vs. quasi-experimental factors or covariates (i.e., numeric continuous, sometimes also ordinal variables)
-     + Within-group vs. between-group factors or covariates
-+ Fixed-effect model parameters estimating the hypothesized main and interaction effects of the study
-+ Variance components (VCs) and correlation parameters (CPs) as within-group model parameters; they correspond to (some of the) fixed-effect model parameters     
-+ Random effects as predictions given a specific group-level data (e.g., a specific subject's data) and the model parameters
++ Three dimensions in design of study:
+     + Nested and crossed random factors 
+     + Experimental and quasi-experimental fixed factors / covariates
+     + Within-group vs. between-group factors / covariates
++ Contrasts (indicator variables) and trends
++ Contrast- and trend-based fixed-effect model parameters
++ Variance components (VCs) and correlation parameters (CPs)   
++ Random effects (conditional means)
 
+### Response, covariates, and factors
 
-LMMs, like many other types of statistical models, describe a relationship between a *response* variable and some of the *covariates* that have been measured or observed along with the response. In LMMs at least one of the covariates is a *categorical* covariate representing experimental or observational “units” in the data set. In the example from the chemical industry discussed in this vignette, the observational unit is the batch of an intermediate product used in production of a dye. In psychology and linguistics the observational units are often the subjects or items in the study. In agriculture the experimental units may be the plots of land or the specific plants being studied.
+LMMs, like many other types of statistical models, describe a relationship between a *response* variable and some of the *covariates* that have been measured or observed along with the response. The statistical model assumes that the residuals of the fitted response (i.e., not the responses) are normally -- also identically and independently -- distributed. This is the *first assumption* of normality in the linear mixed model. It is standard practice that model residuals are inspected and, if serious skew is indicated, that the response is Box-Cox transformed to fulfill this model assumption. 
 
-In all of these cases the factors or covariates are observed at a set of discrete *levels*. We may use numbers, such as subject identifiers, to designate the particular levels that we observed but these numbers are simply labels. The important characteristic of a categorical covariate is that, at each observed value of the response, the covariate takes on the value of one of a set of distinct levels. Categorical covariates of this kind are also called grouping or random factors.  The attribute _random_ signifies that ideally the discrete levels of the factor represent a random sample from the population defined by the factor. 
+ In the following we distinguish between *categorical covariates* and *numerical covariates*. Categorical covariates are  *factors*. The important characteristic of a factor is that, for each observed value of the response, the factor takes on the value of one of a set of discrete levels.  The levels can be unordered (nominal) or ordered (ordinal). We use the term *covariate* when we refer to *numerical covariates*, that is to continuous measures with some distribution. In principle, statistical models are not constrained by the distribution of observations across levels of factors and covariates, but the distributions may lead to problems of model identification and they have implications for the statistical power. 
 
-The units of the random factor are exposed to experimental or quasi-experimental manipulations implemented in study designs. The researcher controls the assigmnet of units of  the random factor (e.g., subjects) to experimental manipulations (e.g., training vs. control group). In contrast,  These manipulations are represented as factors with a fixed and discrete set of levels or as covariates assoicated with numeric values. The distinction between experimental and quasi-experimental factors / covariates is
+ Statistical power, especially for the detection of interactions, is best for uniformly distributed factors and covariates. In experimental designs, uniformity is achieved by balanced assignment of subjects (or other carriers of responses) to the levels of factors or combinations of factor levels. In observational contexts, we achieve uniform distributions by stratification (e..g., on age, gender, or IQ scores). Statistical power is also worse for skewed than normal distributions. Therefore, although it is *not* required to meet an assumption of the statistical model, it may be useful to consider Box-Cox transformations of covariates.
 
-To make the distinction more concrete, suppose the objective is to model the annual reading test scores for students in a school district and that the covariates recorded with the score include a student identifier and the student’s gender. Both of these are between-subject categorical factors”. The levels of the gender factor, *male* and *female*, are fixed. If we consider data from another school district or we incorporate scores from earlier tests, we will not change those levels.
+ ### Nested and crossed random (grouping) factors
 
-On the other hand, the students whose scores we observed would generally be regarded as a sample from the set of all possible students whom we could have observed. Therefore, the levels of student identifier define a *random* factor. Adding more data, either from more school districts or from results on previous or subsequent tests, will increase the number of distinct levels of the student identifier.
+In LMMs the levels of at least one of the factors represents *units* in the data set that are assumed to be sampled, ideally randomly, from a population that is normally distributed with respect to the response. *This is the second assumption of normal distribution in LMMs.*  In the example from the chemical industry discussed in this vignette, the observational unit is the batch of an intermediate product used in production of a dye. In psychology and linguistics the observational units are often the subjects or items (e..g., texts, sentences, words, pictures) in the study. In agriculture the experimental units may be the plots of land or the specific plants being studied. We may use numbers, such as subject identifiers, to designate the particular levels that we observed but these numbers are simply labels.
+
+Random sampling is the basis of generalization from the sample to the population. The core statistics we will estimate in this context are variances and correlations of grand means and (quasi-)experimental effects. These terms will be explained below. What we want to stress here is that the estimation of variances and correlations requires a larger number of units (levels) than the estimation of means. Therefore, from a practical perspective, it is important that random factors are represented with many units. For example, after seeing five persons on a previously unknown island will hardly allow us to get obtain reliable estimate of the variance in population height. Large samples of subjects and words will yield reliable estimates; separate analysis for subgroups of subjects or words will substantially reduce their reliability.
+
+When there is more than one random factor, it is useful to be clear about their relation. The two prototypical cases are that they are *nested* or *crossed*.  In multilevel models, a special case of mixed models, the levels of the random factors are strictly nested. For examples, at a given time, students attend classes in schools. Students, classes, and schools could be three random factors. As soon as we look at this scenario across several school years, the nesting quickly falls apart because students may move between classes and between schools. 
+
+In psychology and linguistics a typical situation is that random factors are crossed. For example, every subject reads all the words in all the sentences prepared by the experimenter for a self-paced reading experiment with word-by-word presentation (or alternatively: every word elicits a respond from all subjects). However, if it is an eye-movement experiment the perfect crossing on a measure like fixation duration will not be attainable because of, for example, loss of measurement due to blink or skipping of words.
+
+In summary, the typical situation in experimental and observational studies with more than one random factor is partial crossing / nesting. Linear mixed models handle these situations very well. 
+
+### Experimental and quasi-experimental fixed factors / covariates
+
+*Fixed experimental factor or covariate*. In experiments the units (or levels) of the random factor(s) are assigned to manipulations implemented in their design. The researcher controls the assignment of units of the random factor(s) (e.g., subjects, items) to experimental manipulations. These manipulations are represented as factors with a fixed and discrete set of levels (e.g., training vs. control group) or as covariates associated with continuous numeric values (e.g., presentation times). 
+
+*Fixed quasi-experimental factor or covariate*. In observational studies (which can also be experiments) the units (or levels) of random factors may "bring along" characteristics that represent the levels of quasi-experimental factors or covariates beyond the control of the researcher. Whether a a subject is female, male, or diverse or whether a word is a noun, a verb, or an adjective are examples of quasi-experimental factors of gender or word type, respectively. Subject-related covariates are body height, body mass, and IQ scores; word-related covariates are their lengths, frequency, and cloze predictability. 
+
+### Between- and within-factors / covariates
+
+### Fixed-effect model parameters 
+
+Fixed-effect model parameters estimate the hypothesized main and interaction effects of the study
+
+### Variance components (VCs) and correlation parameters (CPs)
+
+Variance components (VCs) and correlation parameters (CPs) are within-group model parameters; they correspond to (some of the) fixed-effect model parameters.
+
+### Random effects (conditional means)
+
+Random effects are predictions for the units (levels) of the random factors given the units data (e.g., a specific subject's data) and the model parameters.
+
+### Mixed-effects models
 
 *Mixed-effects models* or, more simply, *mixed models* are statistical models that incorporate both fixed-effects and variance parameters. Because of the way that we will define variance parameters a model with variance parameters always includes at least one fixed-effects parameter. Thus, any model with a variance parameter is a mixed model.
 
