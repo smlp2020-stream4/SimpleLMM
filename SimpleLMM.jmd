@@ -1,5 +1,8 @@
 ---
 title : An Introduction to Simple Linear Mixed Model
+author: 
+- "Douglas Bates"
+- "Reinhold Kliegl"
 ---
 
 # Overview
@@ -89,7 +92,7 @@ The data are described in Davies (1984), the fourth edition of the book mentione
 First attach the packages to be used
 
 ```{julia;term=true}
-import Cairo
+# import Cairo
 using DataFrames, DataFramesMeta, Distributions, GLM, Gadfly
 using MixedModels, Random, LinearAlgebra
 ```
@@ -139,7 +142,7 @@ The data are simulated data presented in Box and Tiao (1973), where the authors 
 The structure and summary are intentionally similar to those of the `Dyestuff` data.
 
 ```{julia;term=true}
-dyestuff2 = MixedModels.dataset(:dyestuff2)
+dyestuff2 = MixedModels.dataset(:dyestuff2);
 describe(dyestuff2)
 ```
 
@@ -231,9 +234,6 @@ $$
   \mathcal{B}&\sim\mathcal{N}(\bf{0},\Sigma_\theta)\\.
 \end{aligned}
 $$
-
-```
-```
 
 The *conditional mean* of $\mathcal Y$, given $\mathcal B=\bf b$, is the *linear predictor*, $\bf X\bf\beta+\bf Z\bf b$, which depends on the $p$-dimensional *fixed-effects parameter*, $\bf \beta$, and on $\bf b$. The *model matrices*, $\bf X$ and $\bf Z$, of dimension $n\times p$ and $n\times q$, respectively, are determined from the formula for the model and the values of covariates. Although the matrix $\bf Z$ can be large (i.e. both $n$ and $q$ can be large), it is sparse (i.e. most of the elements in the matrix are zero).
 
@@ -356,10 +356,10 @@ Whether or not verbose output is requested, the `optsum` field of a `MixedModel`
 mm1.optsum
 ```
 
-The full list of fields in a `MixedModel` object is
+The full list of properties of a `LinearMixedModel` object is
 
 ```{julia;term=true}
-fieldnames(LinearMixedModel)
+propertynames(mm1)
 ```
 
 The `formula` field is a copy of the model formula
@@ -368,19 +368,19 @@ The `formula` field is a copy of the model formula
 mm1.formula
 ```
 
-The `trms` field is a vector of numerical objects representing the terms in the model, including the response vector. As the names imply, the `sqrtwts` and `wttrms` fields are for incorporating case weights. These fields are not often used when fitting linear mixed models but are vital to the process of fitting a generalized linear mixed model, described in a separate vignette.  When used, `sqrtwts` is a diagonal matrix of size `n`. A size of `0` indicates weights are not used.
+The `allterms` field is a vector of numerical objects representing the terms in the model, including the response vector. As the names imply, the `sqrtwts` fields is for incorporating case weights. These fields are not often used when fitting linear mixed models but are vital to the process of fitting a generalized linear mixed model, described in a separate vignette.  When used, `sqrtwts` is a diagonal matrix of size `n`. A size of `0` indicates weights are not used.
 
 ```{julia;term=true}
 mm1.sqrtwts
 ```
 
-The `reterms` field is a vector of `ReMat` objects.
+The `reterms` property is a vector of `ReMat` objects.
 
 ```{julia;term=true}
 length(mm1.reterms)
 ```
 
-And the `feterms` field is a vector of length 2.  The first element is $\bf X$, the $n\times p$ model matrix for the fixed-effects parameters, $\bf\beta$, and the last element is $\bf y$, the response vector stored as a matrix of size $n\times 1$.  In `mm1`, $\bf X$ consists of a single column of 1's
+And the `feterms` property is a vector of length 2.  The first element is $\bf X$, the $n\times p$ model matrix for the fixed-effects parameters, $\bf\beta$, and the last element is $\bf y$, the response vector stored as a matrix of size $n\times 1$.  In `mm1`, $\bf X$ consists of a single column of 1's
 
 ```{julia;term=true}
 first(mm1.feterms).x
@@ -447,7 +447,7 @@ It is not necessary to store the full $\Lambda$ matrix.  Storing the small lower
 first(mm1.λ)
 ```
 
-The `L` field is a blocked matrix like the `A` field containing the upper Cholesky factor of
+The `L` field is a blocked matrix like the `A` field containing the lower Cholesky factor of
 
 $$
 \begin{bmatrix}
@@ -549,7 +549,7 @@ The [`Gadfly`](https://github.com/GiovineItalia/Gadfly.jl) package for Julia use
 We start with the estimate of the standard deviation of the residuals.
 
 ```{julia;term=true}
-σs = @where(mm1bstp_df, :type .== "σ", :group .== "residual").value
+σs = mm1bstp.σ
 ```
 ```{julia;echo=false;fig_cap="Parametric bootstrap samples for residuals"; fig_width=8;}
 plot(x = σs, Geom.histogram,
@@ -559,7 +559,7 @@ plot(x = σs, Geom.histogram,
 Here are samples for the fixed effect.
 
 ```{julia;term=true}
-βs = @where(mm1bstp_df, :type .== "β").value
+βs = getproperty.(mm1bstp.β, :β)
 ```
 
 ```{julia;echo=false;fig_cap="Parametric bootstrap samples for fixed-effect estimates"; fig_width=8;}
@@ -570,7 +570,7 @@ plot(x = βs, Geom.histogram,
 And, finally, the samples for the subject-related VC.
 
 ```{julia;term=true}
-σ₁s = @where(mm1bstp_df, :type .== "σ", :group .== "batch").value
+σ₁s = getproperty.(mm1bstp.σs, :σ)
 ```
 
 ```{julia;echo=false;fig_cap="Parametric bootstrap samples for batch-related VCs"; fig_width=8;}
@@ -580,20 +580,18 @@ plot(x = σ₁s, Geom.histogram,
 
 The models are defined in terms of variances, but the variance is usually not a good scale on which to assess the variability of the parameter estimates. As shown in the first and third histogram, the standard deviation or, in some cases, the logarithm of the standard deviation is a more suitable scale.
 
-The histogram of $\sigma_1$ has a "spike" at zero.  Because the value of $\sigma^2$ is never zero, a value of $\sigma_1^2=0$ must correspond to $\theta=0$.  There are several ways to count the zeros in `sigma1`.  The simplest is to use `count` on the nonzeros, and subtrack that value from the total number of values in `sigma1`.
-
+The histogram of $\sigma_1$ has a "spike" at zero.  Because the value of $\sigma^2$ is never zero, a value of $\sigma_1^2=0$ must correspond to $\theta=0$.  Count the zeros in `σ₁s`.
 ```{julia;term=true}
-length(σ₁s) - count(!iszero, σ₁s)
+count(iszero, σ₁s)
 ```
-
-That is, nearly 1/10 of the `sigma1` values are zeros.  Because such a spike or pulse will be spread out or diffused in a kernel density plot,
+That is, over 1/10 of the `sigma1` values are zeros.  Because such a spike or pulse will be spread out or diffused in a kernel density plot,
 
 ```{julia;term=true}
 σ² = varest(mm1)
-λ = first(mm1.λ)
+λ = only(mm1.λ)
 Σ = σ² * λ * λ'
 σ = sqrt(σ²)
-σ_1 = sqrt(Σ[1,1])
+σ_1 = sqrt(only(Σ))
 ```
 
 ```{julia;echo=false;fig_width=8}
@@ -615,7 +613,7 @@ plot(x = βs, xintercept = [mm1bstp_df2[1, :interval][1], fixef(mm1)[1], mm1bstp
 ```{julia;echo=false;fig_width=8}
 plot(x = σs, xintercept = [mm1bstp_df2[3, :interval][1], σ, mm1bstp_df2[3, :interval][2]], 
     Geom.density, Geom.vline(color=[ "red", "black", "red"]),
-    Guide.xlabel("Parametric bootstrap estimates of batch-related σ₁"))
+    Guide.xlabel("Parametric bootstrap estimates of residual standard deviation, σ"))
 ```
 
 The standard approach of summarizing a sample by its mean and standard deviation, or of constructing a confidence interval using the sample mean, the standard error of the mean and quantiles of a *t* or normal distribution, are based on the assumption that the sample is approximately normal (also called Gaussian) in shape.  A *normal probability plot*, which plots sample quantiles versus quantiles of the standard normal distribution, $\mathcal{N}(0,1)$, can be used to assess the validity of this assumption.  If the points fall approximately along a straight line, the assumption of normality should be valid.  Systematic departures from a straight line are cause for concern.
@@ -625,13 +623,7 @@ In Gadfly a normal probability plot can be  constructed by specifying the statis
 This approach is suitable for small to moderate sample sizes, but not for sample sizes of 10,000.  To smooth the plot and to reduce the size of the plot files, we plot quantiles defined by a sequence of `n` "probability points".  These are constructed by partitioning the interval (0, 1) into `n` equal-width subintervals and returning the midpoint of each of the subintervals.
 
 ```{julia;term=true}
-function ppoints(n)
-    if n ≤ 0
-        throw(ArgumentError("n = $n should be positive"))
-    end
-    width = inv(n)
-    width / 2 : width : one(width)
-end
+ppoints(n) = inv(2n):inv(n):1.0
 const ppt250 = ppoints(250)
 ```
 
@@ -700,25 +692,7 @@ abs2.(sigma95) ≈ quantile(abs2.(σs), [0.025, 0.975])
 
 An alternative approach is to evaluate all of the contiguous intervals containing, say, 95% of the sample and return the shortest shortest such interval.  This is the equivalent of a *Highest Posterior Density (HPD)* interval sometimes used in Bayesian analysis.  If the procedure is applied to a unimodal (i.e. one that has only one peak or *mode*) theoretical probability density the resulting interval has the property that the density at the left endpoint is equal to the density at the right endpoint and that the density at any point outside the interval is less than the density at any point inside the interval.  Establishing this equivalence is left as an exercise for the mathematically inclined reader.  (Hint: Start with the interval defined by the "equal density at the endpoints" property and consider what happens if you shift that interval while maintaining the same area under the density curve.  You will be replacing a region of higher density by one with a lower density and the interval must become wider to maintain the same area.)
 
-With large samples a brute-force enumeration approach works.
-
-```{julia;term=true}
-function hpdinterval(v, level=0.95)
-    n = length(v)
-    if !(0 < level < 1)
-        throw(ArgumentError("level = $level must be in (0, 1)"))
-    end
-    if (lbd = floor(Int, (1 - level) * n)) < 2
-        throw(ArgumentError(
-            "level = $level is too large from sample size $n"))
-    end
-    ordstat = sort(v)
-    leftendpts = ordstat[1:lbd]
-    rtendpts = ordstat[(1 + n - lbd):n]
-    (w, ind) = findmin(rtendpts - leftendpts)
-    return [leftendpts[ind], rtendpts[ind]]
-end
-```
+With large samples a brute-force enumeration approach works, which is what is implemented in the `shortestcovint` function.
 
 For example, the 95% HPD interval calculated from the sample of $\beta_1$ values is
 
@@ -921,7 +895,6 @@ This script can be used to generate alternative source or output files in the RE
 julia> using Weave
 julia> convert_doc("SimpleLMM.jmd", "SimpleLMM.ipynb")  # input for Jupyter notebook
 julia> convert_doc("SimpleLMM.jmd", "SimpleLMM.jl")     # Julia script w/o markdown
-julia> convert_doc("SimpleLMM.jmd", "SimpleLMM.md")     # input for pandoc2html, pandoc2pdf
 ```
 **Alternative output files**
 
@@ -929,7 +902,7 @@ The script can be executed and the output written with different formats. The fi
 
 ```
 julia> list_out_formats()
-julia> weave("SimpleLMM.md", fig_path="figures", fig_ext=".svg", doctype="pandoc2html", pandoc_options=["--toc", "-N"]) # HTML file
+julia> weave("SimpleLMM.jmd", fig_path="figures", fig_ext=".svg", doctype="pandoc2html", pandoc_options=["--toc", "-N"]) # HTML file
 ```
 ## Session information
 
